@@ -146,7 +146,7 @@ class UFO extends PositionComponent with HasCollisionDetection, CollisionCallbac
   }
   
   void wrapPosition(Vector2 screenSize) {
-    final margin = size / 2;
+    final margin = ufoSize / 2;
     
     if (position.x < -margin) position.x = screenSize.x + margin;
     if (position.x > screenSize.x + margin) position.x = -margin;

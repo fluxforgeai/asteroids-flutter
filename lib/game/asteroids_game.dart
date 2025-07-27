@@ -13,7 +13,7 @@ import 'systems/sound_system.dart';
 
 enum GameState { menu, playing, paused, gameOver }
 
-class AsteroidsGame extends FlameGame with HasKeyboardHandlerComponents, HasCollisionDetection {
+class AsteroidsGame extends FlameGame with HasCollisionDetection {
   // Game state
   final ValueNotifier<GameState> gameStateNotifier = ValueNotifier(GameState.playing);
   final ValueNotifier<int> scoreNotifier = ValueNotifier(0);
@@ -344,33 +344,5 @@ class AsteroidsGame extends FlameGame with HasKeyboardHandlerComponents, HasColl
     await prefs.setInt('high_score', highScoreNotifier.value);
   }
   
-  @override
-  bool onKeyEvent(KeyEvent event, Set<LogicalKeyboardKey> keysPressed) {
-    // Handle keyboard input for desktop/web
-    rotateLeft = keysPressed.contains(LogicalKeyboardKey.arrowLeft) ||
-                 keysPressed.contains(LogicalKeyboardKey.keyA);
-    rotateRight = keysPressed.contains(LogicalKeyboardKey.arrowRight) ||
-                  keysPressed.contains(LogicalKeyboardKey.keyD);
-    thrust = keysPressed.contains(LogicalKeyboardKey.arrowUp) ||
-             keysPressed.contains(LogicalKeyboardKey.keyW);
-    
-    if (event is KeyDownEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.space) {
-        fire();
-        return true;
-      } else if (event.logicalKey == LogicalKeyboardKey.keyH) {
-        hyperspace();
-        return true;
-      } else if (event.logicalKey == LogicalKeyboardKey.keyP) {
-        if (gameStateNotifier.value == GameState.playing) {
-          pause();
-        } else if (gameStateNotifier.value == GameState.paused) {
-          resume();
-        }
-        return true;
-      }
-    }
-    
-    return false;
-  }
+  // Keyboard input will be handled by the UI layer
 }
