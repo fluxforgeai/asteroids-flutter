@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+enum AsteroidSize { small, medium, large }
+
 class SimpleAsteroidsGame extends StatefulWidget {
   const SimpleAsteroidsGame({Key? key}) : super(key: key);
 
@@ -46,6 +48,11 @@ class _SimpleAsteroidsGameState extends State<SimpleAsteroidsGame>
   }
 
   void _initializeGame() {
+    // Reset game state
+    score = 0;
+    lives = 3;
+    bullets.clear();
+    
     ship = Ship(
       position: Offset(gameSize.width / 2, gameSize.height / 2),
     );
@@ -57,10 +64,12 @@ class _SimpleAsteroidsGameState extends State<SimpleAsteroidsGame>
     }
   }
 
-  Asteroid _createRandomAsteroid() {
+  Asteroid _createRandomAsteroid({AsteroidSize? asteroidSize, Offset? position}) {
     final random = Random();
+    final size = asteroidSize ?? AsteroidSize.large;
+    
     return Asteroid(
-      position: Offset(
+      position: position ?? Offset(
         random.nextDouble() * gameSize.width,
         random.nextDouble() * gameSize.height,
       ),
@@ -68,7 +77,7 @@ class _SimpleAsteroidsGameState extends State<SimpleAsteroidsGame>
         (random.nextDouble() - 0.5) * 100,
         (random.nextDouble() - 0.5) * 100,
       ),
-      size: 30 + random.nextDouble() * 20,
+      asteroidSize: size,
     );
   }
 
@@ -117,14 +126,84 @@ class _SimpleAsteroidsGameState extends State<SimpleAsteroidsGame>
     // Bullet-asteroid collisions
     bullets.removeWhere((bullet) {
       for (int i = 0; i < asteroids.length; i++) {
-        if (_isColliding(bullet.position, asteroids[i].position, asteroids[i].size)) {
-          asteroids.removeAt(i);
-          score += 100;
+        if (_isColliding(bullet.position, asteroids[i].position, asteroids[i].getRadius())) {
+          final asteroid = asteroids.removeAt(i);
+          
+          // Play asteroid destruction sound
+          SystemSound.play(SystemSoundType.click);
+          
+          // Add score based on asteroid size
+          switch (asteroid.asteroidSize) {
+            case AsteroidSize.large:
+              score += 20;
+              break;
+            case AsteroidSize.medium:
+              score += 50;
+              break;
+            case AsteroidSize.small:
+              score += 100;
+              break;
+          }
+          
+          // Split asteroid into smaller pieces
+          _splitAsteroid(asteroid);
+          
           return true;
         }
       }
       return false;
     });
+    
+    // Ship-asteroid collisions
+    for (var asteroid in asteroids) {
+      if (_isColliding(ship.position, asteroid.position, asteroid.getRadius() + 10)) {
+        _shipHit();
+        break;
+      }
+    }
+  }
+  
+  void _splitAsteroid(Asteroid asteroid) {
+    if (asteroid.asteroidSize == AsteroidSize.small) return;
+    
+    final newSize = asteroid.asteroidSize == AsteroidSize.large 
+        ? AsteroidSize.medium 
+        : AsteroidSize.small;
+    
+    // Create 2 smaller asteroids
+    for (int i = 0; i < 2; i++) {
+      final angle = Random().nextDouble() * 2 * pi;
+      final speed = 50 + Random().nextDouble() * 50;
+      
+      asteroids.add(_createRandomAsteroid(
+        asteroidSize: newSize,
+        position: asteroid.position,
+      ));
+      
+      // Give them different velocities
+      asteroids.last.velocity = Offset(
+        cos(angle) * speed,
+        sin(angle) * speed,
+      );
+    }
+  }
+  
+  void _shipHit() {
+    // Play explosion sound
+    SystemSound.play(SystemSoundType.alert);
+    
+    lives--;
+    print('Ship hit! Lives remaining: $lives'); // Debug output
+    
+    if (lives <= 0) {
+      isGameRunning = false;
+      print('Game Over!'); // Debug output
+    } else {
+      // Reset ship position to center
+      ship.position = Offset(gameSize.width / 2, gameSize.height / 2);
+      ship.velocity = Offset.zero;
+      ship.rotation = 0;
+    }
   }
 
   bool _isColliding(Offset pos1, Offset pos2, double radius) {
@@ -133,6 +212,9 @@ class _SimpleAsteroidsGameState extends State<SimpleAsteroidsGame>
   }
 
   void _fire() {
+    // Play fire sound
+    SystemSound.play(SystemSoundType.click);
+    
     bullets.add(Bullet(
       position: ship.position,
       velocity: Offset(
@@ -184,6 +266,55 @@ class _SimpleAsteroidsGameState extends State<SimpleAsteroidsGame>
               ),
               size: Size.infinite,
             ),
+            // Game Over overlay
+            if (!isGameRunning)
+              Container(
+                color: Colors.black.withOpacity(0.8),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'GAME OVER',
+                        style: TextStyle(
+                          color: Colors.cyan,
+                          fontSize: 48,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Final Score: $score',
+                        style: const TextStyle(
+                          color: Colors.cyan,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                      ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _initializeGame();
+                            isGameRunning = true;
+                          });
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.cyan,
+                          foregroundColor: Colors.black,
+                        ),
+                        child: const Text(
+                          'PLAY AGAIN',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             // Controls instructions
             Positioned(
               top: 20,
@@ -321,11 +452,11 @@ class Ship {
   }
 
   void rotateLeft() {
-    rotation -= 0.2;
+    rotation -= 0.05;
   }
 
   void rotateRight() {
-    rotation += 0.2;
+    rotation += 0.05;
   }
 
   void thrust() {
@@ -357,24 +488,56 @@ class Ship {
 class Asteroid {
   Offset position;
   Offset velocity;
-  double size;
+  AsteroidSize asteroidSize;
   double rotation;
+  List<Offset> shape = [];
+  
+  static const Map<AsteroidSize, double> sizeMap = {
+    AsteroidSize.small: 15,
+    AsteroidSize.medium: 25,
+    AsteroidSize.large: 40,
+  };
 
   Asteroid({
     required this.position,
     required this.velocity,
-    required this.size,
-  }) : rotation = 0;
+    required this.asteroidSize,
+  }) : rotation = 0 {
+    _generateShape();
+  }
+  
+  void _generateShape() {
+    shape.clear();
+    final radius = getRadius();
+    final points = 8 + Random().nextInt(4); // 8-11 points
+    
+    for (int i = 0; i < points; i++) {
+      final angle = (i / points) * 2 * pi;
+      final variation = 0.7 + Random().nextDouble() * 0.6; // 0.7-1.3 variation
+      final r = radius * variation;
+      
+      shape.add(Offset(
+        cos(angle) * r,
+        sin(angle) * r,
+      ));
+    }
+  }
+  
+  double getRadius() {
+    return sizeMap[asteroidSize]!;
+  }
 
   void update(Size gameSize) {
     position += velocity * 0.016;
     rotation += 0.02;
     
+    final radius = getRadius();
+    
     // Wrap around screen
-    if (position.dx < -size) position = Offset(gameSize.width + size, position.dy);
-    if (position.dx > gameSize.width + size) position = Offset(-size, position.dy);
-    if (position.dy < -size) position = Offset(position.dx, gameSize.height + size);
-    if (position.dy > gameSize.height + size) position = Offset(position.dx, -size);
+    if (position.dx < -radius) position = Offset(gameSize.width + radius, position.dy);
+    if (position.dx > gameSize.width + radius) position = Offset(-radius, position.dy);
+    if (position.dy < -radius) position = Offset(position.dx, gameSize.height + radius);
+    if (position.dy > gameSize.height + radius) position = Offset(position.dx, -radius);
   }
 
   void draw(Canvas canvas) {
@@ -387,24 +550,19 @@ class Asteroid {
     canvas.translate(position.dx, position.dy);
     canvas.rotate(rotation);
 
-    // Draw asteroid as irregular polygon
-    final path = Path();
-    final points = 8;
-    for (int i = 0; i < points; i++) {
-      final angle = (i / points) * 2 * pi;
-      final radius = size * (0.7 + 0.3 * sin(i * 1.5));
-      final x = cos(angle) * radius;
-      final y = sin(angle) * radius;
+    // Draw asteroid using generated shape
+    if (shape.isNotEmpty) {
+      final path = Path();
+      path.moveTo(shape[0].dx, shape[0].dy);
       
-      if (i == 0) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
+      for (int i = 1; i < shape.length; i++) {
+        path.lineTo(shape[i].dx, shape[i].dy);
       }
+      path.close();
+      
+      canvas.drawPath(path, paint);
     }
-    path.close();
 
-    canvas.drawPath(path, paint);
     canvas.restore();
   }
 }
